@@ -61,4 +61,7 @@ pExpr = Lit <$> decimal -- does not handle negative numbers
             where exprs = many (space *> pExpr)
 
 main :: IO ()
-main = print "Hello, Haskell!"
+main = do
+  print "Hello, Haskell lisp parser!"
+  print $ parseOnly pExpr "(list (+ 1 (- 2 3)))"
+
