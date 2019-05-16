@@ -5,7 +5,7 @@ import           Control.Applicative
 import           Data.Attoparsec.Text
 import           Data.Char            (isLetter)
 import qualified Data.Map.Strict      as M
-import           Data.Text
+import           Data.Text            hiding (foldr, zipWith)
 
 {-
 from https://ccrma.stanford.edu/courses/124/resources/Basic%20Lisp%20Primitives.htm
@@ -36,9 +36,9 @@ data Expr = Lit Integer -- does not handle negative numbers!
           | PEven Expr -- (evenp 2)
             -- skipping "other numeric functions" for now
           | List [Expr]
-          | Lambda Var Expr -- (lambda x (+ x x))
+          | Lambda [Var] Expr -- (lambda x (+ x x))
           | Variable Var -- x from above line
-          | Apply Expr Expr
+          | Apply Expr [Expr]
             deriving Show
 
 type Var = Text
@@ -62,15 +62,15 @@ pExpr = Lit <$> decimal -- does not handle negative numbers
         <|> PMinus <$ char '(' <* string "minusp" <* space <*> pExpr <* char ')'
         <|> POdd <$ char '(' <* string "oddp" <* space <*> pExpr <* char ')'
         <|> PEven <$ char '(' <* string "evenp" <* space <*> pExpr <* char ')'
-        <|> Lambda <$ char '(' <* string "lambda" <* space <*> pVar <* space <*> pExpr <* char ')'
+        <|> Lambda <$ char '(' <* string "lambda" <* space <* char '(' <*>  (pVar `sepBy` space) <* char ')' <* space <*> pExpr <* char ')'
         <|> Variable <$> pVar
             -- why doesn't this same thing work for Add, etc?
         <|> List <$ char '(' <* string "list" <*> exprs <* char ')'
-        <|> Apply <$ char '(' <*> pExpr <* space <*> pExpr <* char ')'
+        <|> Apply <$ char '(' <*> pExpr <* space <*> (pExpr `sepBy` space) <* char ')'
             where exprs = many (space *> pExpr)
                   left c = char '(' <* char c <* space
 
-pVar = takeWhile1 isLetter
+pVar = takeWhile1 (not . (`elem` [' ','(' , ')'] ++ "1234567890"))
 
 type Context = M.Map Var Expr
 
@@ -82,11 +82,11 @@ pEval c (Add a b) = case (pEval c a, pEval c b) of
 pEval c (Variable v) = case M.lookup v c of
                          Just v' -> v'
                          Nothing -> (Variable v)
-pEval c (Lambda v e) = Lambda v (pEval (shadow c v) e)
-    where shadow c v = M.delete v c
-pEval c (Apply e1 e2) = case (pEval c e1,pEval c e2) of
-                          (Lambda v body,e2') -> pEval (M.insert v e2' c) body
-                          (e1',e2')           -> Apply e1' e2'
+pEval c (Lambda vs e) = Lambda vs (pEval (shadow c vs) e)
+    where shadow c vs = foldr M.delete c vs
+pEval c (Apply f args) = case (pEval c f,pEval c <$> args) of
+                          (Lambda vs body,args') -> pEval (foldr ($) c (zipWith M.insert vs args')) body
+                          (f',args')            -> Apply f' args'
 
 -- pEval (Add (Lit a) (Lit b)) = Lit (a + b) -- base case for add
 -- pEval (Add a b) | Lit a' <- pEval a, Lit b' <- pEval b = Lit (a' + b')
