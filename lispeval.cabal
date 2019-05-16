@@ -60,10 +60,12 @@ executable lispeval
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       attoparsec >= 0.13.2.2,
-                       base ^>=4.12.0.0,
-                       megaparsec >= 7.0.4,
-                       text >= 1.2.3.1
+  build-depends:       attoparsec >= 0.13.2.2
+                     , base ^>=4.12.0.0
+                     , megaparsec >= 7.0.4
+                     , text >= 1.2.3.1
+                     , containers
+                       
 
   -- Directories containing source files.
   -- hs-source-dirs:

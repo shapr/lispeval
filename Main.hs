@@ -3,6 +3,8 @@ module Main where
 
 import           Control.Applicative
 import           Data.Attoparsec.Text
+import           Data.Char            (isLetter)
+import qualified Data.Map.Strict      as M
 import           Data.Text
 
 {-
@@ -34,8 +36,12 @@ data Expr = Lit Integer -- does not handle negative numbers!
           | PEven Expr -- (evenp 2)
             -- skipping "other numeric functions" for now
           | List [Expr]
+          | Lambda Var Expr -- (lambda x (+ x x))
+          | Variable Var -- x from above line
+          | Apply Expr Expr
             deriving Show
 
+type Var = Text
 -- there must be some way to factor out this code to make it simpler, not sure how
 -- real lisp handles any number of args, pExpr `sepBy` char ' ' ?
 pExpr :: Parser Expr
@@ -56,16 +62,32 @@ pExpr = Lit <$> decimal -- does not handle negative numbers
         <|> PMinus <$ char '(' <* string "minusp" <* space <*> pExpr <* char ')'
         <|> POdd <$ char '(' <* string "oddp" <* space <*> pExpr <* char ')'
         <|> PEven <$ char '(' <* string "evenp" <* space <*> pExpr <* char ')'
+        <|> Lambda <$ char '(' <* string "lambda" <* space <*> pVar <* space <*> pExpr <* char ')'
+        <|> Variable <$> pVar
             -- why doesn't this same thing work for Add, etc?
         <|> List <$ char '(' <* string "list" <*> exprs <* char ')'
+        <|> Apply <$ char '(' <*> pExpr <* space <*> pExpr <* char ')'
             where exprs = many (space *> pExpr)
                   left c = char '(' <* char c <* space
 
+pVar = takeWhile1 isLetter
 
-pEval :: Expr -> Expr
-pEval l@(Lit _) = l
-pEval (Add a b) = case (pEval a, pEval b) of
-                    (Lit a',Lit b') -> Lit (a' + b') -- structural recursion
+type Context = M.Map Var Expr
+
+pEval :: Context -> Expr -> Expr
+pEval _ l@(Lit _) = l
+pEval c (Add a b) = case (pEval c a, pEval c b) of
+                      (Lit a',Lit b') -> Lit (a' + b') -- structural recursion
+                      (a',b')         -> Add a' b'
+pEval c (Variable v) = case M.lookup v c of
+                         Just v' -> v'
+                         Nothing -> (Variable v)
+pEval c (Lambda v e) = Lambda v (pEval (shadow c v) e)
+    where shadow c v = M.delete v c
+pEval c (Apply e1 e2) = case (pEval c e1,pEval c e2) of
+                          (Lambda v body,e2') -> pEval (M.insert v e2' c) body
+                          (e1',e2')           -> Apply e1' e2'
+
 -- pEval (Add (Lit a) (Lit b)) = Lit (a + b) -- base case for add
 -- pEval (Add a b) | Lit a' <- pEval a, Lit b' <- pEval b = Lit (a' + b')
 -- pEval (Add a@(Add _ _) b) = Add (pEval a) b
@@ -80,7 +102,7 @@ is a value separate from an expression?
 a redex is a value that can be reduced
 
 cdsmithus exclaims that if a value is the same type as an expression, it gets messy
-
+(((lambda x (+ x x)) 1)
 -}
 fromRight (Right r) = r
 
@@ -89,4 +111,5 @@ main = do
   print "Hello, Haskell lisp parser!"
   print $ parseOnly pExpr "(list (+ (- 1 1) (* 1 (- 2 3))))"
   print "Hello, Haskell lisp evaluator!"
-  print $ Prelude.take 4 $ iterate pEval $ fromRight $ parseOnly pExpr "(+ (+ 1 1) (+ 1 1))"
+  print $ pEval M.empty $ fromRight $ parseOnly pExpr "(+ (+ 1 1) (+ 1 1))"
+  print $ pEval M.empty $ fromRight $ parseOnly pExpr "(lambda x (+ x x))"
