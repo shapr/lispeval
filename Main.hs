@@ -63,14 +63,25 @@ pExpr = Lit <$> decimal -- does not handle negative numbers
 
 
 pEval :: Expr -> Expr
-pEval l@(Lit _)             = l
-pEval (Add (Lit a) (Lit b)) = Lit (a + b) -- base case for add
-pEval (Add a@(Add _ _) b)   = Add (pEval a) b
-pEval (Add a b@(Add _ _))   = Add a (pEval b)
+pEval l@(Lit _) = l
+pEval (Add a b) = case (pEval a, pEval b) of
+                    (Lit a',Lit b') -> Lit (a' + b') -- structural recursion
+-- pEval (Add (Lit a) (Lit b)) = Lit (a + b) -- base case for add
+-- pEval (Add a b) | Lit a' <- pEval a, Lit b' <- pEval b = Lit (a' + b')
+-- pEval (Add a@(Add _ _) b) = Add (pEval a) b
+-- pEval (Add a b@(Add _ _)) = Add a (pEval b)
 -- pEval (Add a b) =
 -- (Add (Add a b) c) -> (Add (a + b) c)
 
+{-
+is an expression just a reduced term?
+is a value separate from an expression?
 
+a redex is a value that can be reduced
+
+cdsmithus exclaims that if a value is the same type as an expression, it gets messy
+
+-}
 fromRight (Right r) = r
 
 main :: IO ()
@@ -79,4 +90,3 @@ main = do
   print $ parseOnly pExpr "(list (+ (- 1 1) (* 1 (- 2 3))))"
   print "Hello, Haskell lisp evaluator!"
   print $ Prelude.take 4 $ iterate pEval $ fromRight $ parseOnly pExpr "(+ (+ 1 1) (+ 1 1))"
-
